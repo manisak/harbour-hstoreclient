@@ -1,0 +1,36 @@
+name: build-sailfish-rpm
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: coderus/sailfishos-build-engine:latest
+      options: --user root
+    steps:
+      - name: Prepare build tree
+        run: |
+          tar xf $GITHUB_WORKSPACE/../../*.tar* 2>/dev/null || true
+      - uses: actions/checkout@v4
+      - name: Show targets
+        run: sfdk targets
+      - name: Pick SFOS 5 target (aarch64)
+        run: |
+          TARGET=$(sfdk targets | grep -E "SailfishOS-5.*aarch64|SailfishOS-4.*aarch64" | tail -1 | awk '{print $1}')
+          echo "Using target: $TARGET"
+          sfdk config target $TARGET
+      - name: Build package
+        run: |
+          sfdk --we-are-inside-the-SDK build
+      - name: Locate RPM
+        run: find /home/nemo RPMS build ~/rpmbuild -name "*.rpm" 2>/dev/null | head -5
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.0
+          name: harpoon-hstoreclient 0.2.0
+          files: "**/*.rpm"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
