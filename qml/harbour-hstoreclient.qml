@@ -150,6 +150,16 @@ Rectangle {
 
     Component.onCompleted: { loadCats(); loadApps(); }
 
+    // pop everything and return to the main page
+    function goHome() {
+        aboutOverlay.visible = false;
+        catOverlay.visible   = false;
+        devPage.visible      = false;
+        detailPage.visible   = false;
+        root.detail          = null;
+        root.devData         = null;
+    }
+
     // ============================================================
     //  MAIN PAGE  (search + categories button + app list)
     // ============================================================
@@ -428,7 +438,8 @@ Rectangle {
                 }
             }
             PullDownMenu {
-                MenuItem { text: qsTr("Close"); onClicked: catOverlay.visible = false }
+                MenuItem { text: qsTr("Close");           onClicked: catOverlay.visible = false }
+                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
             }
             delegate: BackgroundItem {
                 width: ListView.view.width
@@ -500,6 +511,7 @@ Rectangle {
                     text: qsTr("Install with Harpoon")
                     onClicked: if (root.detail) Qt.openUrlExternally("harpoon://add?url=" + encodeURIComponent(root.detail.repo_url))
                 }
+                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
             }
 
             PushUpMenu {
@@ -885,7 +897,7 @@ Rectangle {
             clip: true
 
             PullDownMenu {
-                MenuItem { text: qsTr("Back"); onClicked: devPage.visible = false }
+                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
             }
 
             Column {
@@ -1047,6 +1059,12 @@ Rectangle {
         anchors.fill: parent
         visible: false
         Rectangle { anchors.fill: parent; color: Theme.rgba(0,0,0,0.85) }
+        SilicaFlickable {
+            anchors.fill: parent
+            PullDownMenu {
+                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+            }
+        }
         MouseArea { anchors.fill: parent; onClicked: aboutOverlay.visible = false }
         Column {
             anchors.centerIn: parent
