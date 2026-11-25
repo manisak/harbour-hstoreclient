@@ -4,4 +4,4 @@ X-Nemo-Application-Type=silica-qt5
 X-Sailjail-Sandboxing=Disabled
 Name=Harpoon Store
 Icon=harbour-hstoreclient
-Exec=harbour-hstoreclient
+Exec=/usr/bin/sailfish-qml harbour-hstoreclient

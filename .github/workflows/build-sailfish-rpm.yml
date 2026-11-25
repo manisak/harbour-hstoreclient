@@ -1,0 +1,53 @@
+name: build-sailfish-rpm
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Stage source tarball
+        run: |
+          set -e
+          PKG=harbour-hstoreclient
+          VER=$(awk '/^Version:/ {print $2}' rpm/$PKG.spec)
+          echo "Building $PKG-$VER"
+          mkdir -p ~/rpmbuild/{SOURCES,SPECS,BUILD,RPMS,SRPMS}
+          # Build a top-level-dir tarball matching %setup -q
+          mkdir -p /tmp/stage/$PKG-$VER
+          cp -r qml icons $PKG.desktop /tmp/stage/$PKG-$VER/
+          cp rpm/$PKG.spec /tmp/stage/$PKG-$VER/ 2>/dev/null || true
+          (cd /tmp/stage && tar cjf ~/rpmbuild/SOURCES/$PKG-$VER.tar.bz2 $PKG-$VER)
+          cp rpm/$PKG.spec ~/rpmbuild/SPECS/
+
+      - name: Build RPM (noarch, pure QML)
+        run: |
+          PKG=harbour-hstoreclient
+          VER=$(awk '/^Version:/ {print $2}' rpm/$PKG.spec)
+          rpmbuild -bb ~/rpmbuild/SPECS/$PKG.spec
+          find ~/rpmbuild/RPMS -name '*.rpm'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: harbour-hstoreclient-rpm
+          path: ~/rpmbuild/RPMS/noarch/*.rpm
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: harbour-hstoreclient ${{ github.ref_name }}
+          files: ~/rpmbuild/RPMS/noarch/*.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
