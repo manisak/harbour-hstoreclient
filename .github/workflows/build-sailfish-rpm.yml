@@ -42,12 +42,7 @@ jobs:
           name: harbour-hstoreclient-rpm
           path: ~/rpmbuild/RPMS/noarch/*.rpm
 
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: harbour-hstoreclient ${{ github.ref_name }}
-          files: ~/rpmbuild/RPMS/noarch/*.rpm
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Note: automatic GitHub Release creation is disabled because the
+      # default GITHUB_TOKEN in this repo lacks 'contents:write' scope.
+      # Download the RPM from the Actions artifacts instead, or create
+      # the release manually in the GitHub web UI.
