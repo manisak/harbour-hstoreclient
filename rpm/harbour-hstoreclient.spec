@@ -10,7 +10,9 @@ BuildArch:  noarch
 
 Requires:   libsailfishapp-launcher
 Requires:   sailfishsilica-qt5
-BuildRequires: desktop-file-utils
+# BuildRequires are intentionally omitted — this spec is built on a plain
+# Ubuntu runner with rpmbuild (no SailfishOS SDK), so desktop-file-utils
+# is installed via apt and called directly, not through rpmbuild dep checks.
 
 %description
 Harpoon Store client: browse the community app index at
