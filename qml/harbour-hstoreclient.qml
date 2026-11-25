@@ -49,7 +49,9 @@ Rectangle {
             viewModel.append({
                 appId: a.appId, name: a.name, description: a.description,
                 repoUrl: a.repoUrl, appCategory: a.appCategory, cat_slug: a.cat_slug,
-                iconUrl: a.iconUrl, appRating: a.appRating, ratings: a.ratings,
+                iconUrl: a.iconUrl,
+                fullIconUrl: a.iconUrl ? (root.storeUrl + a.iconUrl) : "",
+                appRating: a.appRating, ratings: a.ratings,
                 currentVersion: a.currentVersion, owner: a.owner
             });
         }
@@ -304,26 +306,22 @@ Rectangle {
                                 Image {
                                     id: listIcon
                                     anchors { fill: parent; margins: Theme.paddingSmall }
+                                    width: parent.width - Theme.paddingSmall * 2
+                                    height: parent.height - Theme.paddingSmall * 2
                                     fillMode: Image.PreserveAspectFit
                                     asynchronous: false
                                     cache: false
                                     smooth: true
                                     sourceSize.width: Theme.itemSizeMedium
                                     sourceSize.height: Theme.itemSizeMedium
-                                    visible: false
-                                    Component.onCompleted: {
-                                        if (model.iconUrl) {
-                                            listIcon.source = root.storeUrl + model.iconUrl;
-                                            listIcon.visible = true;
-                                        }
-                                    }
+                                    source: model.fullIconUrl
                                 }
                                 Label {
                                     anchors.centerIn: parent
                                     text: model.name ? model.name.charAt(0).toUpperCase() : "?"
                                     color: Theme.highlightColor
                                     font.pixelSize: Theme.fontSizeLarge
-                                    visible: !listIcon.visible
+                                    visible: listIcon.status !== Image.Ready
                                 }
                             }
 
