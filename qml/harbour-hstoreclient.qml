@@ -34,6 +34,34 @@ Rectangle {
     ListModel { id: viewModel }
     ListModel { id: catModel }
 
+    // Build a harpoon://add link with the correct source parameter.
+    // Harpoon auto-detects GitHub, Codeberg and Codefloe, but other
+    // Gitea/Forgejo instances (e.g. git.agnos.is) need an explicit hint.
+    function harpoonLink(repoUrl) {
+        if (!repoUrl) return "";
+        var link = "harpoon://add?url=" + encodeURIComponent(repoUrl);
+        var host = "";
+        try { host = repoUrl.replace(/^https?:\/\//, "").split("/")[0].toLowerCase(); } catch (e) {}
+        // GitHub is auto-detected by Harpoon — no source param needed.
+        if (host === "github.com" || host === "www.github.com") return link;
+        // Codeberg / Codefloe are in Harpoon's defaultHosts — also auto-detected.
+        if (host === "codeberg.org" || host === "codefloe.com") return link;
+        // GitLab.com is auto-detected.
+        if (host === "gitlab.com" || host === "www.gitlab.com") return link;
+        // Everything else that looks like a Gitea/Forgejo/Gitness instance:
+        // git.*, code.*, forge.*, gitlab.* self-hosted, etc.
+        if (/^(git|code|forge|gitea|forgejo|gitlab|git\.)/.test(host) ||
+            host.indexOf("gitea") !== -1 || host.indexOf("forgejo") !== -1) {
+            // Self-hosted GitLab gets GitLab source, everything else Forgejo.
+            if (host.indexOf("gitlab") !== -1) {
+                return link + "&source=GitLab";
+            }
+            return link + "&source=Forgejo";
+        }
+        // Unknown host — let Harpoon try its generic web-page scraper.
+        return link;
+    }
+
     // ------------------------- helpers -------------------------
 
     function refreshView() {
@@ -507,7 +535,7 @@ Rectangle {
                 }
                 MenuItem {
                     text: qsTr("Install with Harpoon")
-                    onClicked: if (root.detail) Qt.openUrlExternally("harpoon://add?url=" + encodeURIComponent(root.detail.repo_url))
+                    onClicked: if (root.detail) Qt.openUrlExternally(harpoonLink(root.detail.repo_url))
                 }
                 MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
             }
@@ -605,7 +633,7 @@ Rectangle {
                 BackgroundItem {
                     width: parent.width
                     height: installBtn.height + Theme.paddingMedium * 2
-                    onClicked: if (root.detail) Qt.openUrlExternally("harpoon://add?url=" + encodeURIComponent(root.detail.repo_url))
+                    onClicked: if (root.detail) Qt.openUrlExternally(harpoonLink(root.detail.repo_url))
                     Rectangle {
                         id: installBtn
                         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
