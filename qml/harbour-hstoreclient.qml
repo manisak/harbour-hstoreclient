@@ -4,6 +4,7 @@ import Sailfish.Silica 1.0
 // Harpoon Store — native Sailfish OS Silica client.
 // Runs under `sailfish-qml harbour-hstoreclient` (Rectangle root, no ApplicationWindow).
 // Manual page-stack via visible-toggled Items; Silica components inside.
+// v0.3.2 — full-width swipe-back, no back buttons, synchronous icon loading.
 
 Rectangle {
     id: root
@@ -34,11 +35,6 @@ Rectangle {
     ListModel { id: catModel }
 
     // ------------------------- helpers -------------------------
-
-    // swipe-back handling (left-edge drag closes overlays/detail pages)
-    property real _swipeStartX: 0
-    property real _swipeStartY: 0
-    property bool _swipeTracking: false
 
     function refreshView() {
         viewModel.clear();
@@ -92,7 +88,6 @@ Rectangle {
             try {
                 var o = JSON.parse(x.responseText);
                 masterModel.clear();
-                // server already exposes cat name; cat_slug not in /api/apps.json — fetch via /api/app/:id.json only when needed.
                 for (var i = 0; i < o.apps.length; ++i) {
                     var a = o.apps[i];
                     masterModel.append({
@@ -297,22 +292,28 @@ Rectangle {
                                     border { color: Theme.rgba(Theme.highlightColor, 0.25); width: 1 }
                                 }
                                 Image {
+                                    id: listIcon
                                     anchors { fill: parent; margins: Theme.paddingSmall }
-                                    source: model.iconUrl ? (root.storeUrl + model.iconUrl) : ""
                                     fillMode: Image.PreserveAspectFit
                                     asynchronous: false
                                     cache: false
                                     smooth: true
                                     sourceSize.width: Theme.itemSizeMedium
                                     sourceSize.height: Theme.itemSizeMedium
-                                    visible: model.iconUrl ? true : false
+                                    visible: false
+                                    Component.onCompleted: {
+                                        if (model.iconUrl) {
+                                            listIcon.source = root.storeUrl + model.iconUrl;
+                                            listIcon.visible = true;
+                                        }
+                                    }
                                 }
                                 Label {
                                     anchors.centerIn: parent
                                     text: model.name ? model.name.charAt(0).toUpperCase() : "?"
                                     color: Theme.highlightColor
                                     font.pixelSize: Theme.fontSizeLarge
-                                    visible: !model.iconUrl
+                                    visible: !listIcon.visible
                                 }
                             }
 
@@ -450,6 +451,29 @@ Rectangle {
                 }
             }
         }
+
+        // swipe-right to close
+        MouseArea {
+            anchors.fill: parent
+            propagateComposedEvents: true
+            preventStealing: false
+            property real startX: 0
+            property real startY: 0
+            property bool tracking: false
+            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
+            onReleased: {
+                if (!tracking) { mouse.accepted = false; return; }
+                tracking = false;
+                var dx = mouse.x - startX;
+                var dy = Math.abs(mouse.y - startY);
+                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
+                    catOverlay.visible = false;
+                    mouse.accepted = true;
+                } else {
+                    mouse.accepted = false;
+                }
+            }
+        }
     }
 
     // ============================================================
@@ -476,7 +500,6 @@ Rectangle {
                     text: qsTr("Install with Harpoon")
                     onClicked: if (root.detail) Qt.openUrlExternally("harpoon://add?url=" + encodeURIComponent(root.detail.repo_url))
                 }
-                MenuItem { text: qsTr("Back"); onClicked: detailPage.visible = false }
             }
 
             PushUpMenu {
@@ -490,27 +513,14 @@ Rectangle {
                 spacing: Theme.paddingMedium
                 visible: !!root.detail
 
-                // ---- back bar ----
-                BackgroundItem {
-                    width: parent.width
-                    height: Theme.itemSizeSmall
-                    onClicked: detailPage.visible = false
-                    Label {
-                        anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
-                                  verticalCenter: parent.verticalCenter }
-                        text: "‹ " + qsTr("Back")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                    }
-                }
-
                 // ---- hero: icon + name + meta ----
                 Item {
                     width: parent.width
-                    height: heroRow.height + Theme.paddingMedium
+                    height: heroRow.height + Theme.paddingLarge * 2
                     Row {
                         id: heroRow
                         anchors { left: parent.left; right: parent.right; top: parent.top
+                                  topMargin: Theme.paddingLarge
                                   leftMargin: Theme.horizontalPageMargin
                                   rightMargin: Theme.horizontalPageMargin }
                         spacing: Theme.paddingMedium
@@ -525,22 +535,22 @@ Rectangle {
                                 border { color: Theme.rgba(Theme.highlightColor, 0.30); width: 1 }
                             }
                             Image {
+                                id: detailIcon
                                 anchors { fill: parent; margins: Theme.paddingSmall }
-                                source: root.detail && root.detail.iconUrl ? (root.storeUrl + root.detail.iconUrl) : ""
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: false
                                 cache: false
                                 smooth: true
                                 sourceSize.width: Theme.itemSizeHuge
                                 sourceSize.height: Theme.itemSizeHuge
-                                visible: !!(root.detail && root.detail.iconUrl)
+                                visible: false
                             }
                             Label {
                                 anchors.centerIn: parent
                                 text: root.detail ? root.detail.name.charAt(0).toUpperCase() : "?"
                                 color: Theme.highlightColor
                                 font.pixelSize: Theme.fontSizeHuge
-                                visible: !(root.detail && root.detail.iconUrl)
+                                visible: !detailIcon.visible
                             }
                         }
 
@@ -705,13 +715,15 @@ Rectangle {
                             }
                             Image {
                                 anchors { fill: parent; margins: 2 }
-                                source: root.storeUrl + modelData
                                 fillMode: Image.PreserveAspectCrop
                                 asynchronous: false
                                 cache: false
                                 smooth: true
                                 sourceSize.width: width
                                 sourceSize.height: height
+                                Component.onCompleted: {
+                                    if (modelData) source = root.storeUrl + modelData;
+                                }
                             }
                         }
                     }
@@ -833,6 +845,29 @@ Rectangle {
                 }
             }
         }
+
+        // swipe-right to close (full-width)
+        MouseArea {
+            anchors.fill: parent
+            propagateComposedEvents: true
+            preventStealing: false
+            property real startX: 0
+            property real startY: 0
+            property bool tracking: false
+            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
+            onReleased: {
+                if (!tracking) { mouse.accepted = false; return; }
+                tracking = false;
+                var dx = mouse.x - startX;
+                var dy = Math.abs(mouse.y - startY);
+                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
+                    detailPage.visible = false;
+                    mouse.accepted = true;
+                } else {
+                    mouse.accepted = false;
+                }
+            }
+        }
     }
 
     // ============================================================
@@ -859,26 +894,14 @@ Rectangle {
                 spacing: Theme.paddingMedium
                 visible: !!root.devData
 
-                BackgroundItem {
-                    width: parent.width
-                    height: Theme.itemSizeSmall
-                    onClicked: devPage.visible = false
-                    Label {
-                        anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
-                                  verticalCenter: parent.verticalCenter }
-                        text: "‹ " + qsTr("Back")
-                        color: Theme.highlightColor
-                        font.pixelSize: Theme.fontSizeMedium
-                    }
-                }
-
                 // header: avatar + username + role
                 Item {
                     width: parent.width
-                    height: devHeaderRow.height + Theme.paddingMedium
+                    height: devHeaderRow.height + Theme.paddingLarge * 2
                     Row {
                         id: devHeaderRow
                         anchors { left: parent.left; right: parent.right; top: parent.top
+                                  topMargin: Theme.paddingLarge
                                   leftMargin: Theme.horizontalPageMargin
                                   rightMargin: Theme.horizontalPageMargin }
                         spacing: Theme.paddingMedium
@@ -944,21 +967,27 @@ Rectangle {
                                     color: Theme.rgba(Theme.highlightColor, 0.10)
                                 }
                                 Image {
+                                    id: devAppIcon
                                     anchors { fill: parent; margins: 4 }
-                                    source: modelData.iconUrl ? (root.storeUrl + modelData.iconUrl) : ""
                                     fillMode: Image.PreserveAspectFit
                                     asynchronous: false
                                     cache: false
                                     sourceSize.width: Theme.itemSizeSmall
                                     sourceSize.height: Theme.itemSizeSmall
-                                    visible: !!modelData.iconUrl
+                                    visible: false
+                                    Component.onCompleted: {
+                                        if (modelData.iconUrl) {
+                                            devAppIcon.source = root.storeUrl + modelData.iconUrl;
+                                            devAppIcon.visible = true;
+                                        }
+                                    }
                                 }
                                 Label {
                                     anchors.centerIn: parent
                                     text: modelData.name.charAt(0).toUpperCase()
                                     color: Theme.highlightColor
                                     font.pixelSize: Theme.fontSizeMedium
-                                    visible: !modelData.iconUrl
+                                    visible: !devAppIcon.visible
                                 }
                             }
                             Column {
@@ -982,6 +1011,29 @@ Rectangle {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // swipe-right to close (full-width)
+        MouseArea {
+            anchors.fill: parent
+            propagateComposedEvents: true
+            preventStealing: false
+            property real startX: 0
+            property real startY: 0
+            property bool tracking: false
+            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
+            onReleased: {
+                if (!tracking) { mouse.accepted = false; return; }
+                tracking = false;
+                var dx = mouse.x - startX;
+                var dy = Math.abs(mouse.y - startY);
+                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
+                    devPage.visible = false;
+                    mouse.accepted = true;
+                } else {
+                    mouse.accepted = false;
                 }
             }
         }
@@ -1046,6 +1098,29 @@ Rectangle {
                 }
             }
         }
+
+        // swipe-right to close
+        MouseArea {
+            anchors.fill: parent
+            propagateComposedEvents: true
+            preventStealing: false
+            property real startX: 0
+            property real startY: 0
+            property bool tracking: false
+            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
+            onReleased: {
+                if (!tracking) { mouse.accepted = false; return; }
+                tracking = false;
+                var dx = mouse.x - startX;
+                var dy = Math.abs(mouse.y - startY);
+                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
+                    aboutOverlay.visible = false;
+                    mouse.accepted = true;
+                } else {
+                    mouse.accepted = false;
+                }
+            }
+        }
     }
 
     // ============================================================
@@ -1056,43 +1131,6 @@ Rectangle {
         running: root.busy && (detailPage.visible || devPage.visible)
         visible: running
         anchors.centerIn: parent
-    }
-
-    // ============================================================
-    //  SWIPE-BACK gesture — left-edge drag closes the topmost page
-    // ============================================================
-    MouseArea {
-        id: edgeSwipe
-        anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-        width: Theme.paddingLarge * 2
-        // only when an overlay is open
-        enabled: detailPage.visible || devPage.visible || catOverlay.visible || aboutOverlay.visible
-        visible: enabled
-        propagateComposedEvents: false
-        preventStealing: true
-
-        property real startX: 0
-        property real startY: 0
-        property bool tracking: false
-
-        onPressed: {
-            startX = mouse.x; startY = mouse.y; tracking = true;
-        }
-        onReleased: {
-            if (!tracking) return;
-            tracking = false;
-            var dx = mouse.x - startX;
-            var dy = Math.abs(mouse.y - startY);
-            if (dx > root.width * 0.20 && dy < root.height * 0.15) {
-                if (aboutOverlay.visible)      aboutOverlay.visible = false;
-                else if (catOverlay.visible)   catOverlay.visible   = false;
-                else if (devPage.visible)      devPage.visible      = false;
-                else if (detailPage.visible)   detailPage.visible   = false;
-            }
-        }
-        onPositionChanged: {
-            // optional: visual feedback — could translate the top page by dx
-        }
     }
 
     // ============================================================
@@ -1134,6 +1172,16 @@ Rectangle {
                 font.pixelSize: Theme.fontSizeTiny
                 color: Theme.secondaryColor
             }
+        }
+    }
+
+    // detail icon loader (set source when detail changes)
+    onDetailChanged: {
+        if (root.detail && root.detail.iconUrl) {
+            detailIcon.source = root.storeUrl + root.detail.iconUrl;
+            detailIcon.visible = true;
+        } else {
+            detailIcon.visible = false;
         }
     }
 }

@@ -1,6 +1,6 @@
 Name:       harbour-hstoreclient
 Summary:    Harpoon Store client for SailfishOS
-Version:    0.3.1
+Version:    0.3.2
 Release:    1
 Group:      Applications/Internet
 License:    MIT
