@@ -24,12 +24,21 @@ Rectangle {
     // search filter
     property string searchText: ""
 
+    // Cover mode: when the app is minimized/inactive we hide all content and
+    // show only the anchor + app name (sailfish-qml has no real cover API).
+    readonly property bool appActive: Qt.application.state === Qt.ApplicationActive
+
     // master list (all apps across all cats) + view list (filtered)
     ListModel { id: masterModel }
     ListModel { id: viewModel }
     ListModel { id: catModel }
 
     // ------------------------- helpers -------------------------
+
+    // swipe-back handling (left-edge drag closes overlays/detail pages)
+    property real _swipeStartX: 0
+    property real _swipeStartY: 0
+    property bool _swipeTracking: false
 
     function refreshView() {
         viewModel.clear();
@@ -155,6 +164,7 @@ Rectangle {
         visible: !detailPage.visible && !devPage.visible && !catOverlay.visible
 
         SilicaFlickable {
+            id: mainFlick
             anchors.fill: parent
             contentHeight: mainCol.height + Theme.paddingLarge * 2
             clip: true
@@ -163,6 +173,11 @@ Rectangle {
                 MenuItem { text: qsTr("About Harpoon Store"); onClicked: aboutOverlay.visible = true }
                 MenuItem { text: qsTr("Categories");          onClicked: catOverlay.visible = true }
                 MenuItem { text: qsTr("Reload");              onClicked: { loadCats(); loadApps(); } }
+            }
+
+            PushUpMenu {
+                visible: mainFlick.contentHeight > mainFlick.height
+                MenuItem { text: qsTr("Back to top"); onClicked: mainFlick.scrollToTop() }
             }
 
             Column {
@@ -285,8 +300,11 @@ Rectangle {
                                     anchors { fill: parent; margins: Theme.paddingSmall }
                                     source: model.iconUrl ? (root.storeUrl + model.iconUrl) : ""
                                     fillMode: Image.PreserveAspectFit
-                                    asynchronous: true
+                                    asynchronous: false
+                                    cache: false
                                     smooth: true
+                                    sourceSize.width: Theme.itemSizeMedium
+                                    sourceSize.height: Theme.itemSizeMedium
                                     visible: model.iconUrl ? true : false
                                 }
                                 Label {
@@ -444,6 +462,7 @@ Rectangle {
         Rectangle { anchors.fill: parent; color: Theme.overlayBackgroundColor }
 
         SilicaFlickable {
+            id: detailFlick
             anchors.fill: parent
             contentHeight: detailCol.height + Theme.paddingLarge * 2
             clip: true
@@ -458,6 +477,11 @@ Rectangle {
                     onClicked: if (root.detail) Qt.openUrlExternally("harpoon://add?url=" + encodeURIComponent(root.detail.repo_url))
                 }
                 MenuItem { text: qsTr("Back"); onClicked: detailPage.visible = false }
+            }
+
+            PushUpMenu {
+                visible: detailFlick.contentHeight > detailFlick.height
+                MenuItem { text: qsTr("Back to top"); onClicked: detailFlick.scrollToTop() }
             }
 
             Column {
@@ -504,8 +528,11 @@ Rectangle {
                                 anchors { fill: parent; margins: Theme.paddingSmall }
                                 source: root.detail && root.detail.iconUrl ? (root.storeUrl + root.detail.iconUrl) : ""
                                 fillMode: Image.PreserveAspectFit
-                                asynchronous: true
+                                asynchronous: false
+                                cache: false
                                 smooth: true
+                                sourceSize.width: Theme.itemSizeHuge
+                                sourceSize.height: Theme.itemSizeHuge
                                 visible: !!(root.detail && root.detail.iconUrl)
                             }
                             Label {
@@ -680,8 +707,11 @@ Rectangle {
                                 anchors { fill: parent; margins: 2 }
                                 source: root.storeUrl + modelData
                                 fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
+                                asynchronous: false
+                                cache: false
                                 smooth: true
+                                sourceSize.width: width
+                                sourceSize.height: height
                             }
                         }
                     }
@@ -917,7 +947,10 @@ Rectangle {
                                     anchors { fill: parent; margins: 4 }
                                     source: modelData.iconUrl ? (root.storeUrl + modelData.iconUrl) : ""
                                     fillMode: Image.PreserveAspectFit
-                                    asynchronous: true
+                                    asynchronous: false
+                                    cache: false
+                                    sourceSize.width: Theme.itemSizeSmall
+                                    sourceSize.height: Theme.itemSizeSmall
                                     visible: !!modelData.iconUrl
                                 }
                                 Label {
@@ -1023,5 +1056,84 @@ Rectangle {
         running: root.busy && (detailPage.visible || devPage.visible)
         visible: running
         anchors.centerIn: parent
+    }
+
+    // ============================================================
+    //  SWIPE-BACK gesture — left-edge drag closes the topmost page
+    // ============================================================
+    MouseArea {
+        id: edgeSwipe
+        anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+        width: Theme.paddingLarge * 2
+        // only when an overlay is open
+        enabled: detailPage.visible || devPage.visible || catOverlay.visible || aboutOverlay.visible
+        visible: enabled
+        propagateComposedEvents: false
+        preventStealing: true
+
+        property real startX: 0
+        property real startY: 0
+        property bool tracking: false
+
+        onPressed: {
+            startX = mouse.x; startY = mouse.y; tracking = true;
+        }
+        onReleased: {
+            if (!tracking) return;
+            tracking = false;
+            var dx = mouse.x - startX;
+            var dy = Math.abs(mouse.y - startY);
+            if (dx > root.width * 0.20 && dy < root.height * 0.15) {
+                if (aboutOverlay.visible)      aboutOverlay.visible = false;
+                else if (catOverlay.visible)   catOverlay.visible   = false;
+                else if (devPage.visible)      devPage.visible      = false;
+                else if (detailPage.visible)   detailPage.visible   = false;
+            }
+        }
+        onPositionChanged: {
+            // optional: visual feedback — could translate the top page by dx
+        }
+    }
+
+    // ============================================================
+    //  COVER overlay — shown when the app is minimized/inactive
+    //  (sailfish-qml has no real cover API, so we simulate one)
+    // ============================================================
+    Rectangle {
+        id: coverOverlay
+        anchors.fill: parent
+        visible: !root.appActive
+        color: Theme.overlayBackgroundColor
+        z: 1000
+
+        Column {
+            anchors.centerIn: parent
+            spacing: Theme.paddingMedium
+            width: parent.width * 0.7
+
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "⚓"
+                font.pixelSize: Theme.fontSizeHuge * 1.6
+                color: Theme.highlightColor
+            }
+            Label {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: qsTr("Harpoon Store")
+                font.pixelSize: Theme.fontSizeExtraLarge
+                font.family: Theme.fontFamilyHeading
+                color: Theme.highlightColor
+            }
+            Label {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: qsTr("Community apps for Sailfish OS")
+                font.pixelSize: Theme.fontSizeTiny
+                color: Theme.secondaryColor
+            }
+        }
     }
 }
