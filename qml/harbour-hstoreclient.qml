@@ -3,8 +3,7 @@ import Sailfish.Silica 1.0
 
 // Harpoon Store — native Sailfish OS Silica client.
 // Runs under `sailfish-qml harbour-hstoreclient` (Rectangle root, no ApplicationWindow).
-// Manual page-stack via visible-toggled Items; Silica components inside.
-// v0.3.2 — full-width swipe-back, no back buttons, synchronous icon loading.
+// v0.4.0 — Jolla-Store-inspired redesign with horizontal swipe navigation.
 
 Rectangle {
     id: root
@@ -13,76 +12,48 @@ Rectangle {
 
     property string storeUrl: "https://harpoon-store.manisak.com"
     property string statusMsg: ""
-    property string activeCat: ""
-    property string activeCatName: "All"
     property bool   busy: false
 
     // currently open detail-app (null = closed)
     property var    detail: null
     // currently open developer page (null = closed)
     property var    devData: null
+    // currently open category list (null = closed)
+    property var    catData: null
 
     // search filter
     property string searchText: ""
 
-    // Cover mode: when the app is minimized/inactive we hide all content and
-    // show only the anchor + app name (sailfish-qml has no real cover API).
+    // Cover mode
     readonly property bool appActive: Qt.application.state === Qt.ApplicationActive
 
-    // master list (all apps across all cats) + view list (filtered)
-    ListModel { id: masterModel }
-    ListModel { id: viewModel }
-    ListModel { id: catModel }
+    // data models
+    ListModel { id: masterModel }   // all apps
+    ListModel { id: newModel }      // newest apps (by id desc)
+    ListModel { id: bestModel }     // best rated apps
+    ListModel { id: catModel }      // categories
+    ListModel { id: viewModel }     // filtered/search results
+    ListModel { id: catAppsModel }  // apps in selected category
 
-    // Build a harpoon://add link with the correct source parameter.
-    // Harpoon auto-detects GitHub, Codeberg and Codefloe, but other
-    // Gitea/Forgejo instances (e.g. git.agnos.is) need an explicit hint.
+    // current horizontal page index (0=home, 1=categories, 2=search)
+    property int currentPage: 0
+
+    // ------------------------- helpers -------------------------
+
     function harpoonLink(repoUrl) {
         if (!repoUrl) return "";
         var link = "harpoon://add?url=" + encodeURIComponent(repoUrl);
         var host = "";
         try { host = repoUrl.replace(/^https?:\/\//, "").split("/")[0].toLowerCase(); } catch (e) {}
-        // GitHub is auto-detected by Harpoon — no source param needed.
         if (host === "github.com" || host === "www.github.com") return link;
-        // Codeberg / Codefloe are in Harpoon's defaultHosts — also auto-detected.
         if (host === "codeberg.org" || host === "codefloe.com") return link;
-        // GitLab.com is auto-detected.
         if (host === "gitlab.com" || host === "www.gitlab.com") return link;
-        // Everything else that looks like a Gitea/Forgejo/Gitness instance:
-        // git.*, code.*, forge.*, gitlab.* self-hosted, etc.
         if (/^(git|code|forge|gitea|forgejo|gitlab|git\.)/.test(host) ||
             host.indexOf("gitea") !== -1 || host.indexOf("forgejo") !== -1) {
-            // Self-hosted GitLab gets GitLab source, everything else Forgejo.
-            if (host.indexOf("gitlab") !== -1) {
-                return link + "&source=GitLab";
-            }
+            if (host.indexOf("gitlab") !== -1) return link + "&source=GitLab";
             return link + "&source=Forgejo";
         }
-        // Unknown host — let Harpoon try its generic web-page scraper.
         return link;
-    }
-
-    // ------------------------- helpers -------------------------
-
-    function refreshView() {
-        viewModel.clear();
-        var needle = searchText.toLowerCase();
-        for (var i = 0; i < masterModel.count; ++i) {
-            var a = masterModel.get(i);
-            if (activeCat && a.cat_slug !== activeCat) continue;
-            if (needle.length) {
-                var hay = (a.name + " " + a.description + " " + a.owner).toLowerCase();
-                if (hay.indexOf(needle) === -1) continue;
-            }
-            viewModel.append({
-                appId: a.appId, name: a.name, description: a.description,
-                repoUrl: a.repoUrl, appCategory: a.appCategory, cat_slug: a.cat_slug,
-                iconUrl: a.iconUrl,
-                fullIconUrl: a.iconUrl ? (root.storeUrl + a.iconUrl) : "",
-                appRating: a.appRating, ratings: a.ratings,
-                currentVersion: a.currentVersion, owner: a.owner
-            });
-        }
     }
 
     function loadCats() {
@@ -118,19 +89,89 @@ Rectangle {
             try {
                 var o = JSON.parse(x.responseText);
                 masterModel.clear();
+                newModel.clear();
+                bestModel.clear();
                 for (var i = 0; i < o.apps.length; ++i) {
                     var a = o.apps[i];
-                    masterModel.append({
+                    var entry = {
                         appId: a.id, name: a.name, description: a.description || "",
                         repoUrl: a.repo_url, appCategory: a.category || "General",
                         cat_slug: a.cat_slug || "",
-                        iconUrl: a.iconUrl, appRating: a.rating > 0 ? a.rating : 0,
+                        iconUrl: a.iconUrl,
+                        fullIconUrl: a.iconUrl ? (root.storeUrl + a.iconUrl) : "",
+                        appRating: a.rating > 0 ? a.rating : 0,
+                        ratings: a.ratings || 0, currentVersion: a.current_version || "",
+                        owner: a.owner || ""
+                    };
+                    masterModel.append(entry);
+                    // newest: first 6 (server returns by id desc = newest first)
+                    if (i < 6) newModel.append(entry);
+                    // best: rating > 0, sorted by rating desc
+                    if (entry.appRating > 0) bestModel.append(entry);
+                }
+                // sort bestModel by rating desc
+                for (var k = 0; k < bestModel.count; ++k) {
+                    for (var l = k + 1; l < bestModel.count; ++l) {
+                        if (bestModel.get(l).appRating > bestModel.get(k).appRating) {
+                            var tmp = bestModel.get(k);
+                            bestModel.set(k, bestModel.get(l));
+                            bestModel.set(l, tmp);
+                        }
+                    }
+                }
+                // keep only top 6
+                while (bestModel.count > 6) bestModel.remove(bestModel.count - 1);
+                refreshView();
+            } catch (e) { statusMsg = "Parse error: " + e; }
+        };
+        x.send();
+    }
+
+    function refreshView() {
+        viewModel.clear();
+        var needle = searchText.toLowerCase();
+        for (var i = 0; i < masterModel.count; ++i) {
+            var a = masterModel.get(i);
+            if (needle.length) {
+                var hay = (a.name + " " + a.description + " " + a.owner).toLowerCase();
+                if (hay.indexOf(needle) === -1) continue;
+            }
+            viewModel.append({
+                appId: a.appId, name: a.name, description: a.description,
+                repoUrl: a.repoUrl, appCategory: a.appCategory, cat_slug: a.cat_slug,
+                iconUrl: a.iconUrl, fullIconUrl: a.fullIconUrl,
+                appRating: a.appRating, ratings: a.ratings,
+                currentVersion: a.currentVersion, owner: a.owner
+            });
+        }
+    }
+
+    function loadCategory(slug, name) {
+        busy = true;
+        catAppsModel.clear();
+        var x = new XMLHttpRequest();
+        x.open("GET", storeUrl + "/api/apps.json" + (slug ? "?cat=" + slug : ""), true);
+        x.onreadystatechange = function () {
+            if (x.readyState !== XMLHttpRequest.DONE) return;
+            busy = false;
+            if (x.status !== 200) { statusMsg = "Cat apps HTTP " + x.status; return; }
+            try {
+                var o = JSON.parse(x.responseText);
+                for (var i = 0; i < o.apps.length; ++i) {
+                    var a = o.apps[i];
+                    catAppsModel.append({
+                        appId: a.id, name: a.name, description: a.description || "",
+                        repoUrl: a.repo_url, appCategory: a.category || "General",
+                        cat_slug: a.cat_slug || "",
+                        iconUrl: a.iconUrl,
+                        fullIconUrl: a.iconUrl ? (root.storeUrl + a.iconUrl) : "",
+                        appRating: a.rating > 0 ? a.rating : 0,
                         ratings: a.ratings || 0, currentVersion: a.current_version || "",
                         owner: a.owner || ""
                     });
                 }
-                refreshView();
-            } catch (e) { statusMsg = "Parse error: " + e; }
+                catData = { slug: slug, name: name };
+            } catch (e) { statusMsg = "Cat apps parse: " + e; }
         };
         x.send();
     }
@@ -146,8 +187,6 @@ Rectangle {
             try {
                 var o = JSON.parse(x.responseText);
                 detail = o;
-                detailPage.visible = true;
-                devPage.visible = false;
             } catch (e) { statusMsg = "Detail parse: " + e; }
         };
         x.send();
@@ -165,273 +204,464 @@ Rectangle {
             try {
                 var o = JSON.parse(x.responseText);
                 devData = o;
-                devPage.visible = true;
             } catch (e) { statusMsg = "Dev parse: " + e; }
         };
         x.send();
     }
 
-    function selectCat(slug, name) {
-        activeCat = slug;
-        activeCatName = name;
-        refreshView();
-        catOverlay.visible = false;
+    function goHome() {
+        detail = null;
+        devData = null;
+        catData = null;
+        currentPage = 0;
+    }
+
+    function goBack() {
+        if (detail) { detail = null; return; }
+        if (devData) { devData = null; return; }
+        if (catData) { catData = null; return; }
+        if (currentPage > 0) currentPage = 0;
     }
 
     Component.onCompleted: { loadCats(); loadApps(); }
 
-    // pop everything and return to the main page
-    function goHome() {
-        aboutOverlay.visible = false;
-        catOverlay.visible   = false;
-        devPage.visible      = false;
-        detailPage.visible   = false;
-        root.detail          = null;
-        root.devData         = null;
-    }
-
     // ============================================================
-    //  MAIN PAGE  (search + categories button + app list)
+    //  HORIZONTAL PAGE NAVIGATION (SlideshowView-like)
     // ============================================================
-    Item {
-        id: mainPage
+    ListView {
+        id: pageView
         anchors.fill: parent
-        visible: !detailPage.visible && !devPage.visible && !catOverlay.visible
+        orientation: ListView.Horizontal
+        snapMode: ListView.SnapOneItem
+        highlightRangeMode: ListView.StrictlyEnforceRange
+        preferredHighlightBegin: 0
+        preferredHighlightEnd: width
+        currentIndex: root.currentPage
+        onCurrentIndexChanged: root.currentPage = currentIndex
+        interactive: !root.detail && !root.devData && !root.catData  // disable when overlay open
+        model: 3
 
-        SilicaFlickable {
-            id: mainFlick
-            anchors.fill: parent
-            contentHeight: mainCol.height + Theme.paddingLarge * 2
-            clip: true
+        delegate: Item {
+            width: pageView.width
+            height: pageView.height
 
-            PullDownMenu {
-                MenuItem { text: qsTr("About Harpoon Store"); onClicked: aboutOverlay.visible = true }
-                MenuItem { text: qsTr("Categories");          onClicked: catOverlay.visible = true }
-                MenuItem { text: qsTr("Reload");              onClicked: { loadCats(); loadApps(); } }
-            }
+            // ============ PAGE 0: HOME ============
+            Loader {
+                active: index === 0
+                anchors.fill: parent
+                sourceComponent: Component {
+                    SilicaFlickable {
+                        id: homeFlick
+                        contentHeight: homeCol.height + Theme.paddingLarge * 2
+                        clip: true
 
-            PushUpMenu {
-                visible: mainFlick.contentHeight > mainFlick.height
-                MenuItem { text: qsTr("Back to top"); onClicked: mainFlick.scrollToTop() }
-            }
+                        PullDownMenu {
+                            MenuItem { text: qsTr("About Harpoon Store"); onClicked: aboutOverlay.visible = true }
+                            MenuItem { text: qsTr("Reload");              onClicked: { loadCats(); loadApps(); } }
+                        }
 
-            Column {
-                id: mainCol
-                width: parent.width
-                spacing: Theme.paddingMedium
+                        PushUpMenu {
+                            visible: homeFlick.contentHeight > homeFlick.height
+                            MenuItem { text: qsTr("Back to top"); onClicked: homeFlick.scrollToTop() }
+                        }
 
-                // ---- hero header ----
-                Item {
-                    width: parent.width
-                    height: heroCol.height + Theme.paddingLarge * 2
-
-                    Column {
-                        id: heroCol
-                        anchors { left: parent.left; right: parent.right; top: parent.top
-                                  leftMargin: Theme.horizontalPageMargin
-                                  rightMargin: Theme.horizontalPageMargin
-                                  topMargin: Theme.paddingLarge }
-                        spacing: Theme.paddingSmall
-
-                        Row {
+                        Column {
+                            id: homeCol
+                            width: parent.width
                             spacing: Theme.paddingMedium
-                            Label {
-                                text: "⚓"
-                                font.pixelSize: Theme.fontSizeHuge
-                                color: Theme.highlightColor
-                                anchors.verticalCenter: parent.verticalCenter
+
+                            // hero header
+                            Item {
+                                width: parent.width
+                                height: heroCol.height + Theme.paddingLarge * 2
+                                Column {
+                                    id: heroCol
+                                    anchors { left: parent.left; right: parent.right; top: parent.top
+                                              leftMargin: Theme.horizontalPageMargin
+                                              rightMargin: Theme.horizontalPageMargin
+                                              topMargin: Theme.paddingLarge }
+                                    spacing: Theme.paddingSmall
+                                    Row {
+                                        spacing: Theme.paddingMedium
+                                        Label {
+                                            text: "⚓"
+                                            font.pixelSize: Theme.fontSizeHuge
+                                            color: Theme.highlightColor
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        Label {
+                                            text: qsTr("Harpoon Store")
+                                            font.pixelSize: Theme.fontSizeExtraLarge
+                                            font.family: Theme.fontFamilyHeading
+                                            color: Theme.highlightColor
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                    Label {
+                                        text: qsTr("Community apps for Sailfish OS")
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color: Theme.secondaryColor
+                                    }
+                                }
                             }
+
+                            // ---- section: New apps ----
+                            SectionHeader {
+                                text: qsTr("New apps")
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: { loadCategory("", qsTr("All apps")); }
+                                }
+                                Label {
+                                    anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
+                                              verticalCenter: parent.verticalCenter }
+                                    text: "›"
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeLarge
+                                }
+                            }
+                            GridView {
+                                width: parent.width
+                                height: Math.ceil(newModel.count / 2) * (Theme.itemSizeHuge + Theme.paddingLarge)
+                                cellWidth: width / 2
+                                cellHeight: Theme.itemSizeHuge + Theme.paddingLarge
+                                model: newModel
+                                interactive: false
+                                delegate: BackgroundItem {
+                                    width: cellWidth
+                                    height: cellHeight
+                                    onClicked: loadDetail(model.appId)
+                                    Column {
+                                        anchors { centerIn: parent; margins: Theme.paddingSmall }
+                                        spacing: Theme.paddingSmall
+                                        width: parent.width - Theme.paddingMedium * 2
+                                        Item {
+                                            width: Theme.itemSizeMedium; height: Theme.itemSizeMedium
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: Theme.paddingSmall
+                                                color: Theme.rgba(Theme.highlightColor, 0.10)
+                                            }
+                                            Image {
+                                                anchors { fill: parent; margins: 4 }
+                                                width: parent.width - 8; height: parent.height - 8
+                                                fillMode: Image.PreserveAspectFit
+                                                asynchronous: false; cache: false; smooth: true
+                                                sourceSize.width: Theme.itemSizeMedium
+                                                sourceSize.height: Theme.itemSizeMedium
+                                                source: model.fullIconUrl
+                                            }
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: model.name.charAt(0).toUpperCase()
+                                                color: Theme.highlightColor
+                                                font.pixelSize: Theme.fontSizeLarge
+                                                visible: parent.children[1].status !== Image.Ready
+                                            }
+                                        }
+                                        Label {
+                                            width: parent.width
+                                            horizontalAlignment: Text.AlignHCenter
+                                            text: model.name
+                                            color: Theme.primaryColor
+                                            font.pixelSize: Theme.fontSizeExtraSmall
+                                            maximumLineCount: 2
+                                            wrapMode: Text.Wrap
+                                            elide: Text.ElideRight
+                                        }
+                                        Label {
+                                            width: parent.width
+                                            horizontalAlignment: Text.AlignHCenter
+                                            text: "@" + model.owner
+                                            color: Theme.secondaryColor
+                                            font.pixelSize: Theme.fontSizeTiny
+                                            truncationMode: TruncationMode.Fade
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---- section: Best apps ----
+                            SectionHeader {
+                                text: qsTr("Best apps")
+                                visible: bestModel.count > 0
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: { /* TODO: best apps page */ }
+                                }
+                                Label {
+                                    anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
+                                              verticalCenter: parent.verticalCenter }
+                                    text: "›"
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeLarge
+                                }
+                            }
+                            GridView {
+                                width: parent.width
+                                height: Math.ceil(bestModel.count / 2) * (Theme.itemSizeHuge + Theme.paddingLarge)
+                                cellWidth: width / 2
+                                cellHeight: Theme.itemSizeHuge + Theme.paddingLarge
+                                model: bestModel
+                                interactive: false
+                                visible: bestModel.count > 0
+                                delegate: BackgroundItem {
+                                    width: cellWidth
+                                    height: cellHeight
+                                    onClicked: loadDetail(model.appId)
+                                    Column {
+                                        anchors { centerIn: parent; margins: Theme.paddingSmall }
+                                        spacing: Theme.paddingSmall
+                                        width: parent.width - Theme.paddingMedium * 2
+                                        Item {
+                                            width: Theme.itemSizeMedium; height: Theme.itemSizeMedium
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: Theme.paddingSmall
+                                                color: Theme.rgba(Theme.highlightColor, 0.10)
+                                            }
+                                            Image {
+                                                anchors { fill: parent; margins: 4 }
+                                                width: parent.width - 8; height: parent.height - 8
+                                                fillMode: Image.PreserveAspectFit
+                                                asynchronous: false; cache: false; smooth: true
+                                                sourceSize.width: Theme.itemSizeMedium
+                                                sourceSize.height: Theme.itemSizeMedium
+                                                source: model.fullIconUrl
+                                            }
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: model.name.charAt(0).toUpperCase()
+                                                color: Theme.highlightColor
+                                                font.pixelSize: Theme.fontSizeLarge
+                                                visible: parent.children[1].status !== Image.Ready
+                                            }
+                                        }
+                                        Label {
+                                            width: parent.width
+                                            horizontalAlignment: Text.AlignHCenter
+                                            text: model.name
+                                            color: Theme.primaryColor
+                                            font.pixelSize: Theme.fontSizeExtraSmall
+                                            maximumLineCount: 2
+                                            wrapMode: Text.Wrap
+                                            elide: Text.ElideRight
+                                        }
+                                        Label {
+                                            width: parent.width
+                                            horizontalAlignment: Text.AlignHCenter
+                                            text: "★ " + Number(model.appRating).toFixed(1) + "  ·  @" + model.owner
+                                            color: Theme.highlightColor
+                                            font.pixelSize: Theme.fontSizeTiny
+                                            truncationMode: TruncationMode.Fade
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---- section: Categories ----
+                            SectionHeader {
+                                text: qsTr("Categories")
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.currentPage = 1
+                                }
+                                Label {
+                                    anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
+                                              verticalCenter: parent.verticalCenter }
+                                    text: "›"
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeLarge
+                                }
+                            }
+                            Repeater {
+                                model: catModel
+                                delegate: BackgroundItem {
+                                    width: homeCol.width
+                                    height: Theme.itemSizeSmall
+                                    onClicked: { loadCategory(model.slug, model.name); }
+                                    Label {
+                                        anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
+                                                  verticalCenter: parent.verticalCenter }
+                                        text: model.name
+                                        color: highlighted ? Theme.highlightColor : Theme.primaryColor
+                                        font.pixelSize: Theme.fontSizeMedium
+                                    }
+                                    Label {
+                                        anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
+                                                  verticalCenter: parent.verticalCenter }
+                                        text: model.count + " " + qsTr("apps") + "  ›"
+                                        color: Theme.secondaryColor
+                                        font.pixelSize: Theme.fontSizeSmall
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ============ PAGE 1: CATEGORIES ============
+            Loader {
+                active: index === 1
+                anchors.fill: parent
+                sourceComponent: Component {
+                    SilicaListView {
+                        anchors.fill: parent
+                        model: catModel
+                        header: Item {
+                            width: parent.width
+                            height: Theme.itemSizeLarge
                             Label {
-                                text: qsTr("Harpoon Store")
+                                anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
+                                          verticalCenter: parent.verticalCenter }
+                                text: qsTr("Categories")
                                 font.pixelSize: Theme.fontSizeExtraLarge
                                 font.family: Theme.fontFamilyHeading
                                 color: Theme.highlightColor
-                                anchors.verticalCenter: parent.verticalCenter
                             }
                         }
-                        Label {
-                            text: qsTr("Community apps for Sailfish OS")
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.secondaryColor
+                        PullDownMenu {
+                            MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+                        }
+                        delegate: BackgroundItem {
+                            width: ListView.view.width
+                            height: Theme.itemSizeSmall
+                            onClicked: { loadCategory(model.slug, model.name); }
+                            Label {
+                                anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
+                                          verticalCenter: parent.verticalCenter }
+                                text: model.name
+                                color: highlighted ? Theme.highlightColor : Theme.primaryColor
+                                font.pixelSize: Theme.fontSizeMedium
+                            }
+                            Label {
+                                anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
+                                          verticalCenter: parent.verticalCenter }
+                                text: model.count
+                                color: Theme.secondaryColor
+                                font.pixelSize: Theme.fontSizeSmall
+                            }
                         }
                     }
                 }
+            }
 
-                // ---- search field ----
-                SearchField {
-                    id: search
-                    width: parent.width
-                    placeholderText: qsTr("Search apps, developers…")
-                    onTextChanged: { root.searchText = text; refreshView(); }
-                    EnterKey.onClicked: focus = false
-                }
+            // ============ PAGE 2: SEARCH ============
+            Loader {
+                active: index === 2
+                anchors.fill: parent
+                sourceComponent: Component {
+                    SilicaFlickable {
+                        anchors.fill: parent
+                        contentHeight: searchCol.height + Theme.paddingLarge * 2
+                        clip: true
 
-                // ---- active category chip ----
-                BackgroundItem {
-                    width: parent.width
-                    height: Theme.itemSizeSmall
-                    onClicked: catOverlay.visible = true
-                    Row {
-                        anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
-                                  verticalCenter: parent.verticalCenter }
-                        spacing: Theme.paddingSmall
-                        Label {
-                            text: qsTr("Category:")
-                            color: Theme.secondaryColor
-                            font.pixelSize: Theme.fontSizeSmall
+                        PullDownMenu {
+                            MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
                         }
-                        Label {
-                            text: activeCatName
-                            color: Theme.highlightColor
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.bold: true
-                        }
-                        Label {
-                            text: "▾"
-                            color: Theme.highlightColor
-                            font.pixelSize: Theme.fontSizeSmall
-                        }
-                    }
-                    Label {
-                        anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
-                                  verticalCenter: parent.verticalCenter }
-                        text: viewModel.count + " " + qsTr("apps")
-                        color: Theme.secondaryColor
-                        font.pixelSize: Theme.fontSizeExtraSmall
-                    }
-                }
 
-                SectionHeader { text: qsTr("Browse") }
-
-                // ---- app list ----
-                Repeater {
-                    model: viewModel
-                    delegate: BackgroundItem {
-                        id: rowItem
-                        width: mainCol.width
-                        height: Math.max(Theme.itemSizeLarge, appRow.height + Theme.paddingMedium)
-
-                        onClicked: loadDetail(model.appId)
-
-                        Row {
-                            id: appRow
-                            anchors { left: parent.left; right: parent.right
-                                      verticalCenter: parent.verticalCenter
-                                      leftMargin: Theme.horizontalPageMargin
-                                      rightMargin: Theme.horizontalPageMargin }
+                        Column {
+                            id: searchCol
+                            width: parent.width
                             spacing: Theme.paddingMedium
 
-                            // icon
                             Item {
-                                width: Theme.itemSizeMedium
-                                height: Theme.itemSizeMedium
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: Theme.paddingSmall
-                                    color: Theme.rgba(Theme.highlightColor, 0.08)
-                                    border { color: Theme.rgba(Theme.highlightColor, 0.25); width: 1 }
-                                }
-                                Image {
-                                    id: listIcon
-                                    anchors { fill: parent; margins: Theme.paddingSmall }
-                                    width: parent.width - Theme.paddingSmall * 2
-                                    height: parent.height - Theme.paddingSmall * 2
-                                    fillMode: Image.PreserveAspectFit
-                                    asynchronous: false
-                                    cache: false
-                                    smooth: true
-                                    sourceSize.width: Theme.itemSizeMedium
-                                    sourceSize.height: Theme.itemSizeMedium
-                                    source: model.fullIconUrl
-                                }
-                                Label {
-                                    anchors.centerIn: parent
-                                    text: model.name ? model.name.charAt(0).toUpperCase() : "?"
-                                    color: Theme.highlightColor
-                                    font.pixelSize: Theme.fontSizeLarge
-                                    visible: listIcon.status !== Image.Ready
-                                }
-                            }
-
-                            // text column
-                            Column {
-                                width: parent.width - Theme.itemSizeMedium - Theme.paddingMedium
-                                spacing: 2
-                                anchors.verticalCenter: parent.verticalCenter
-
-                                Label {
-                                    width: parent.width
-                                    text: model.name
-                                    color: rowItem.highlighted ? Theme.highlightColor : Theme.primaryColor
-                                    font.pixelSize: Theme.fontSizeMedium
-                                    truncationMode: TruncationMode.Fade
-                                }
-                                Label {
-                                    width: parent.width
-                                    text: model.description
-                                    color: Theme.secondaryColor
-                                    font.pixelSize: Theme.fontSizeExtraSmall
-                                    maximumLineCount: 2
-                                    wrapMode: Text.Wrap
-                                    elide: Text.ElideRight
-                                    visible: model.description.length > 0
-                                }
-                                Row {
+                                width: parent.width
+                                height: searchHeader.height + Theme.paddingLarge * 2
+                                Column {
+                                    id: searchHeader
+                                    anchors { left: parent.left; right: parent.right; top: parent.top
+                                              leftMargin: Theme.horizontalPageMargin
+                                              rightMargin: Theme.horizontalPageMargin
+                                              topMargin: Theme.paddingLarge }
                                     spacing: Theme.paddingSmall
                                     Label {
-                                        text: model.appCategory
-                                        color: Theme.secondaryHighlightColor
-                                        font.pixelSize: Theme.fontSizeTiny
-                                    }
-                                    Label {
-                                        visible: model.currentVersion.length > 0
-                                        text: "· v" + model.currentVersion
-                                        color: Theme.secondaryColor
-                                        font.pixelSize: Theme.fontSizeTiny
-                                    }
-                                    Label {
-                                        visible: model.owner.length > 0
-                                        text: "· @" + model.owner
-                                        color: Theme.secondaryColor
-                                        font.pixelSize: Theme.fontSizeTiny
-                                    }
-                                    Label {
-                                        visible: model.appRating > 0
-                                        text: "· ★ " + Number(model.appRating).toFixed(1)
+                                        text: qsTr("Search")
+                                        font.pixelSize: Theme.fontSizeExtraLarge
+                                        font.family: Theme.fontFamilyHeading
                                         color: Theme.highlightColor
-                                        font.pixelSize: Theme.fontSizeTiny
                                     }
                                 }
                             }
-                        }
-                    }
-                }
 
-                // empty / status
-                Item {
-                    width: parent.width
-                    height: emptyCol.height + Theme.paddingLarge * 2
-                    visible: viewModel.count === 0
-                    Column {
-                        id: emptyCol
-                        anchors.centerIn: parent
-                        spacing: Theme.paddingSmall
-                        width: parent.width - 2 * Theme.horizontalPageMargin
-                        BusyIndicator {
-                            size: BusyIndicatorSize.Large
-                            running: root.busy
-                            visible: root.busy
-                            anchors.horizontalCenter: parent.horizontalCenter
-                        }
-                        Label {
-                            width: parent.width
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                            color: Theme.secondaryColor
-                            text: root.busy ? qsTr("Loading…")
-                                            : (root.searchText.length > 0
-                                               ? qsTr("No apps match your search.")
-                                               : (statusMsg.length > 0 ? statusMsg : qsTr("No apps.")))
+                            SearchField {
+                                width: parent.width
+                                placeholderText: qsTr("Search apps, developers…")
+                                onTextChanged: { root.searchText = text; refreshView(); }
+                                EnterKey.onClicked: focus = false
+                            }
+
+                            Repeater {
+                                model: viewModel
+                                delegate: BackgroundItem {
+                                    width: searchCol.width
+                                    height: Math.max(Theme.itemSizeMedium, searchRow.height + Theme.paddingMedium)
+                                    onClicked: loadDetail(model.appId)
+                                    Row {
+                                        id: searchRow
+                                        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
+                                                  leftMargin: Theme.horizontalPageMargin
+                                                  rightMargin: Theme.horizontalPageMargin }
+                                        spacing: Theme.paddingMedium
+                                        Item {
+                                            width: Theme.itemSizeSmall; height: Theme.itemSizeSmall
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: Theme.paddingSmall
+                                                color: Theme.rgba(Theme.highlightColor, 0.10)
+                                            }
+                                            Image {
+                                                anchors { fill: parent; margins: 4 }
+                                                width: parent.width - 8; height: parent.height - 8
+                                                fillMode: Image.PreserveAspectFit
+                                                asynchronous: false; cache: false; smooth: true
+                                                sourceSize.width: Theme.itemSizeSmall
+                                                sourceSize.height: Theme.itemSizeSmall
+                                                source: model.fullIconUrl
+                                            }
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: model.name.charAt(0).toUpperCase()
+                                                color: Theme.highlightColor
+                                                font.pixelSize: Theme.fontSizeMedium
+                                                visible: parent.children[1].status !== Image.Ready
+                                            }
+                                        }
+                                        Column {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - Theme.itemSizeSmall - Theme.paddingMedium
+                                            spacing: 2
+                                            Label {
+                                                width: parent.width
+                                                text: model.name
+                                                color: Theme.primaryColor
+                                                font.pixelSize: Theme.fontSizeMedium
+                                                truncationMode: TruncationMode.Fade
+                                            }
+                                            Label {
+                                                text: model.appCategory + (model.currentVersion ? "  ·  v" + model.currentVersion : "") + "  ·  @" + model.owner
+                                                color: Theme.secondaryColor
+                                                font.pixelSize: Theme.fontSizeExtraSmall
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item {
+                                width: parent.width
+                                height: Theme.itemSizeLarge * 2
+                                visible: viewModel.count === 0
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.searchText.length > 0 ? qsTr("No apps match your search.") : qsTr("Type to search…")
+                                    color: Theme.secondaryColor
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+                            }
                         }
                     }
                 }
@@ -440,86 +670,95 @@ Rectangle {
     }
 
     // ============================================================
-    //  CATEGORY OVERLAY
+    //  OVERLAY: CATEGORY APPS LIST
     // ============================================================
     Item {
         id: catOverlay
         anchors.fill: parent
-        visible: false
+        visible: !!root.catData
         Rectangle { anchors.fill: parent; color: Theme.overlayBackgroundColor }
 
         SilicaListView {
             anchors.fill: parent
-            model: catModel
+            model: catAppsModel
             header: Item {
                 width: parent.width
                 height: Theme.itemSizeLarge
                 Label {
                     anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
                               verticalCenter: parent.verticalCenter }
-                    text: qsTr("Categories")
+                    text: root.catData ? root.catData.name : ""
                     font.pixelSize: Theme.fontSizeExtraLarge
                     font.family: Theme.fontFamilyHeading
                     color: Theme.highlightColor
                 }
             }
             PullDownMenu {
-                MenuItem { text: qsTr("Close");           onClicked: catOverlay.visible = false }
                 MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
             }
             delegate: BackgroundItem {
                 width: ListView.view.width
-                height: Theme.itemSizeSmall
-                onClicked: selectCat(model.slug, model.name)
-                Label {
-                    anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
-                              verticalCenter: parent.verticalCenter }
-                    text: model.name
-                    color: highlighted ? Theme.highlightColor
-                                       : (root.activeCat === model.slug ? Theme.highlightColor : Theme.primaryColor)
-                    font.pixelSize: Theme.fontSizeMedium
-                }
-                Label {
-                    anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
-                              verticalCenter: parent.verticalCenter }
-                    text: model.count
-                    color: Theme.secondaryColor
-                    font.pixelSize: Theme.fontSizeSmall
-                }
-            }
-        }
-
-        // swipe-right to close
-        MouseArea {
-            anchors.fill: parent
-            propagateComposedEvents: true
-            preventStealing: false
-            property real startX: 0
-            property real startY: 0
-            property bool tracking: false
-            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
-            onReleased: {
-                if (!tracking) { mouse.accepted = false; return; }
-                tracking = false;
-                var dx = mouse.x - startX;
-                var dy = Math.abs(mouse.y - startY);
-                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
-                    catOverlay.visible = false;
-                    mouse.accepted = true;
-                } else {
-                    mouse.accepted = false;
+                height: Math.max(Theme.itemSizeMedium, catAppRow.height + Theme.paddingMedium)
+                onClicked: loadDetail(model.appId)
+                Row {
+                    id: catAppRow
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
+                              leftMargin: Theme.horizontalPageMargin
+                              rightMargin: Theme.horizontalPageMargin }
+                    spacing: Theme.paddingMedium
+                    Item {
+                        width: Theme.itemSizeSmall; height: Theme.itemSizeSmall
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: Theme.paddingSmall
+                            color: Theme.rgba(Theme.highlightColor, 0.10)
+                        }
+                        Image {
+                            anchors { fill: parent; margins: 4 }
+                            width: parent.width - 8; height: parent.height - 8
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: false; cache: false; smooth: true
+                            sourceSize.width: Theme.itemSizeSmall
+                            sourceSize.height: Theme.itemSizeSmall
+                            source: model.fullIconUrl
+                        }
+                        Label {
+                            anchors.centerIn: parent
+                            text: model.name.charAt(0).toUpperCase()
+                            color: Theme.highlightColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            visible: parent.children[1].status !== Image.Ready
+                        }
+                    }
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - Theme.itemSizeSmall - Theme.paddingMedium
+                        spacing: 2
+                        Label {
+                            width: parent.width
+                            text: model.name
+                            color: Theme.primaryColor
+                            font.pixelSize: Theme.fontSizeMedium
+                            truncationMode: TruncationMode.Fade
+                        }
+                        Label {
+                            text: model.appCategory + (model.currentVersion ? "  ·  v" + model.currentVersion : "") + "  ·  @" + model.owner
+                            color: Theme.secondaryColor
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                        }
+                    }
                 }
             }
         }
     }
 
     // ============================================================
-    //  DETAIL PAGE
+    //  OVERLAY: DETAIL PAGE
     // ============================================================
     Item {
-        id: detailPage
+        id: detailOverlay
         anchors.fill: parent
-        visible: false
+        visible: !!root.detail
         Rectangle { anchors.fill: parent; color: Theme.overlayBackgroundColor }
 
         SilicaFlickable {
@@ -551,7 +790,7 @@ Rectangle {
                 spacing: Theme.paddingMedium
                 visible: !!root.detail
 
-                // ---- hero: icon + name + meta ----
+                // hero: icon + name + meta
                 Item {
                     width: parent.width
                     height: heroRow.height + Theme.paddingLarge * 2
@@ -562,10 +801,8 @@ Rectangle {
                                   leftMargin: Theme.horizontalPageMargin
                                   rightMargin: Theme.horizontalPageMargin }
                         spacing: Theme.paddingMedium
-
                         Item {
-                            width: Theme.itemSizeHuge
-                            height: Theme.itemSizeHuge
+                            width: Theme.itemSizeHuge; height: Theme.itemSizeHuge
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Theme.paddingMedium
@@ -575,28 +812,25 @@ Rectangle {
                             Image {
                                 id: detailIcon
                                 anchors { fill: parent; margins: Theme.paddingSmall }
+                                width: parent.width - Theme.paddingSmall * 2
+                                height: parent.height - Theme.paddingSmall * 2
                                 fillMode: Image.PreserveAspectFit
-                                asynchronous: false
-                                cache: false
-                                smooth: true
+                                asynchronous: false; cache: false; smooth: true
                                 sourceSize.width: Theme.itemSizeHuge
                                 sourceSize.height: Theme.itemSizeHuge
-                                visible: false
                             }
                             Label {
                                 anchors.centerIn: parent
                                 text: root.detail ? root.detail.name.charAt(0).toUpperCase() : "?"
                                 color: Theme.highlightColor
                                 font.pixelSize: Theme.fontSizeHuge
-                                visible: !detailIcon.visible
+                                visible: detailIcon.status !== Image.Ready
                             }
                         }
-
                         Column {
                             width: parent.width - Theme.itemSizeHuge - Theme.paddingMedium
                             spacing: Theme.paddingSmall / 2
                             anchors.verticalCenter: parent.verticalCenter
-
                             Label {
                                 width: parent.width
                                 text: root.detail ? root.detail.name : ""
@@ -629,7 +863,7 @@ Rectangle {
                     }
                 }
 
-                // ---- install CTA ----
+                // install CTA
                 BackgroundItem {
                     width: parent.width
                     height: installBtn.height + Theme.paddingMedium * 2
@@ -652,7 +886,7 @@ Rectangle {
                     }
                 }
 
-                // ---- developer card ----
+                // developer card
                 SectionHeader { text: qsTr("Developer") }
                 BackgroundItem {
                     width: parent.width
@@ -694,12 +928,11 @@ Rectangle {
                     }
                 }
 
-                // ---- contributors ----
+                // contributors
                 Column {
                     width: parent.width
                     spacing: Theme.paddingSmall
                     visible: !!(root.detail && root.detail.contributors && root.detail.contributors.length > 0)
-
                     SectionHeader { text: qsTr("Contributors") }
                     Flow {
                         width: parent.width - 2 * Theme.horizontalPageMargin
@@ -728,7 +961,7 @@ Rectangle {
                     }
                 }
 
-                // ---- screenshots ----
+                // screenshots
                 Column {
                     width: parent.width
                     spacing: Theme.paddingSmall
@@ -753,21 +986,17 @@ Rectangle {
                             }
                             Image {
                                 anchors { fill: parent; margins: 2 }
+                                width: parent.width - 4; height: parent.height - 4
                                 fillMode: Image.PreserveAspectCrop
-                                asynchronous: false
-                                cache: false
-                                smooth: true
-                                sourceSize.width: width
-                                sourceSize.height: height
-                                Component.onCompleted: {
-                                    if (modelData) source = root.storeUrl + modelData;
-                                }
+                                asynchronous: false; cache: false; smooth: true
+                                sourceSize.width: width; sourceSize.height: height
+                                Component.onCompleted: { if (modelData) source = root.storeUrl + modelData; }
                             }
                         }
                     }
                 }
 
-                // ---- description ----
+                // description
                 Column {
                     width: parent.width
                     spacing: Theme.paddingSmall
@@ -783,7 +1012,7 @@ Rectangle {
                     }
                 }
 
-                // ---- source ----
+                // source
                 Column {
                     width: parent.width
                     spacing: Theme.paddingSmall
@@ -805,7 +1034,7 @@ Rectangle {
                     }
                 }
 
-                // ---- more from this developer ----
+                // more from this developer
                 Column {
                     width: parent.width
                     spacing: Theme.paddingSmall
@@ -835,7 +1064,7 @@ Rectangle {
                     }
                 }
 
-                // ---- comments ----
+                // comments
                 Column {
                     width: parent.width
                     spacing: Theme.paddingSmall
@@ -883,38 +1112,15 @@ Rectangle {
                 }
             }
         }
-
-        // swipe-right to close (full-width)
-        MouseArea {
-            anchors.fill: parent
-            propagateComposedEvents: true
-            preventStealing: false
-            property real startX: 0
-            property real startY: 0
-            property bool tracking: false
-            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
-            onReleased: {
-                if (!tracking) { mouse.accepted = false; return; }
-                tracking = false;
-                var dx = mouse.x - startX;
-                var dy = Math.abs(mouse.y - startY);
-                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
-                    detailPage.visible = false;
-                    mouse.accepted = true;
-                } else {
-                    mouse.accepted = false;
-                }
-            }
-        }
     }
 
     // ============================================================
-    //  DEVELOPER PAGE
+    //  OVERLAY: DEVELOPER PAGE
     // ============================================================
     Item {
-        id: devPage
+        id: devOverlay
         anchors.fill: parent
-        visible: false
+        visible: !!root.devData
         Rectangle { anchors.fill: parent; color: Theme.overlayBackgroundColor }
 
         SilicaFlickable {
@@ -932,7 +1138,6 @@ Rectangle {
                 spacing: Theme.paddingMedium
                 visible: !!root.devData
 
-                // header: avatar + username + role
                 Item {
                     width: parent.width
                     height: devHeaderRow.height + Theme.paddingLarge * 2
@@ -988,15 +1193,13 @@ Rectangle {
                     delegate: BackgroundItem {
                         width: parent.width
                         height: Math.max(Theme.itemSizeMedium, devAppRow.height + Theme.paddingMedium)
-                        onClicked: { devPage.visible = false; loadDetail(modelData.id); }
-
+                        onClicked: { devData = null; loadDetail(modelData.id); }
                         Row {
                             id: devAppRow
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
                                       leftMargin: Theme.horizontalPageMargin
                                       rightMargin: Theme.horizontalPageMargin }
                             spacing: Theme.paddingMedium
-
                             Item {
                                 width: Theme.itemSizeSmall; height: Theme.itemSizeSmall
                                 Rectangle {
@@ -1005,27 +1208,20 @@ Rectangle {
                                     color: Theme.rgba(Theme.highlightColor, 0.10)
                                 }
                                 Image {
-                                    id: devAppIcon
                                     anchors { fill: parent; margins: 4 }
+                                    width: parent.width - 8; height: parent.height - 8
                                     fillMode: Image.PreserveAspectFit
-                                    asynchronous: false
-                                    cache: false
+                                    asynchronous: false; cache: false; smooth: true
                                     sourceSize.width: Theme.itemSizeSmall
                                     sourceSize.height: Theme.itemSizeSmall
-                                    visible: false
-                                    Component.onCompleted: {
-                                        if (modelData.iconUrl) {
-                                            devAppIcon.source = root.storeUrl + modelData.iconUrl;
-                                            devAppIcon.visible = true;
-                                        }
-                                    }
+                                    source: modelData.iconUrl ? (root.storeUrl + modelData.iconUrl) : ""
                                 }
                                 Label {
                                     anchors.centerIn: parent
                                     text: modelData.name.charAt(0).toUpperCase()
                                     color: Theme.highlightColor
                                     font.pixelSize: Theme.fontSizeMedium
-                                    visible: !devAppIcon.visible
+                                    visible: parent.children[1].status !== Image.Ready
                                 }
                             }
                             Column {
@@ -1049,29 +1245,6 @@ Rectangle {
                             }
                         }
                     }
-                }
-            }
-        }
-
-        // swipe-right to close (full-width)
-        MouseArea {
-            anchors.fill: parent
-            propagateComposedEvents: true
-            preventStealing: false
-            property real startX: 0
-            property real startY: 0
-            property bool tracking: false
-            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
-            onReleased: {
-                if (!tracking) { mouse.accepted = false; return; }
-                tracking = false;
-                var dx = mouse.x - startX;
-                var dy = Math.abs(mouse.y - startY);
-                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
-                    devPage.visible = false;
-                    mouse.accepted = true;
-                } else {
-                    mouse.accepted = false;
                 }
             }
         }
@@ -1142,44 +1315,20 @@ Rectangle {
                 }
             }
         }
-
-        // swipe-right to close
-        MouseArea {
-            anchors.fill: parent
-            propagateComposedEvents: true
-            preventStealing: false
-            property real startX: 0
-            property real startY: 0
-            property bool tracking: false
-            onPressed: { startX = mouse.x; startY = mouse.y; tracking = true; mouse.accepted = false; }
-            onReleased: {
-                if (!tracking) { mouse.accepted = false; return; }
-                tracking = false;
-                var dx = mouse.x - startX;
-                var dy = Math.abs(mouse.y - startY);
-                if (dx > root.width * 0.25 && dy < root.height * 0.10) {
-                    aboutOverlay.visible = false;
-                    mouse.accepted = true;
-                } else {
-                    mouse.accepted = false;
-                }
-            }
-        }
     }
 
     // ============================================================
-    //  GLOBAL BUSY INDICATOR (overlay)
+    //  GLOBAL BUSY INDICATOR
     // ============================================================
     BusyIndicator {
         size: BusyIndicatorSize.Large
-        running: root.busy && (detailPage.visible || devPage.visible)
+        running: root.busy
         visible: running
         anchors.centerIn: parent
     }
 
     // ============================================================
-    //  COVER overlay — shown when the app is minimized/inactive
-    //  (sailfish-qml has no real cover API, so we simulate one)
+    //  COVER overlay — shown when minimized
     // ============================================================
     Rectangle {
         id: coverOverlay
@@ -1187,12 +1336,10 @@ Rectangle {
         visible: !root.appActive
         color: Theme.overlayBackgroundColor
         z: 1000
-
         Column {
             anchors.centerIn: parent
             spacing: Theme.paddingMedium
             width: parent.width * 0.7
-
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "⚓"
@@ -1219,13 +1366,10 @@ Rectangle {
         }
     }
 
-    // detail icon loader (set source when detail changes)
+    // detail icon loader
     onDetailChanged: {
         if (root.detail && root.detail.iconUrl) {
             detailIcon.source = root.storeUrl + root.detail.iconUrl;
-            detailIcon.visible = true;
-        } else {
-            detailIcon.visible = false;
         }
     }
 }
