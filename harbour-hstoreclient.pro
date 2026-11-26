@@ -7,7 +7,7 @@ TARGET = harbour-hstoreclient
 CONFIG += sailfishapp
 CONFIG -= sailfishapp_i18n  # no translations bundled yet
 
-VERSION = 0.4.0
+VERSION = 0.4.1
 
 # No SOURCES — pure QML.
 SOURCES +=

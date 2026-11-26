@@ -327,14 +327,14 @@ Rectangle {
                                 cellHeight: Theme.itemSizeHuge + Theme.paddingLarge
                                 model: newModel
                                 interactive: false
+                                clip: true
                                 delegate: BackgroundItem {
-                                    width: cellWidth
-                                    height: cellHeight
+                                    width: GridView.view.cellWidth
+                                    height: GridView.view.cellHeight
                                     onClicked: loadDetail(model.appId)
                                     Column {
-                                        anchors { centerIn: parent; margins: Theme.paddingSmall }
+                                        anchors { fill: parent; margins: Theme.paddingSmall }
                                         spacing: Theme.paddingSmall
-                                        width: parent.width - Theme.paddingMedium * 2
                                         Item {
                                             width: Theme.itemSizeMedium; height: Theme.itemSizeMedium
                                             anchors.horizontalCenter: parent.horizontalCenter
@@ -405,15 +405,15 @@ Rectangle {
                                 cellHeight: Theme.itemSizeHuge + Theme.paddingLarge
                                 model: bestModel
                                 interactive: false
+                                clip: true
                                 visible: bestModel.count > 0
                                 delegate: BackgroundItem {
-                                    width: cellWidth
-                                    height: cellHeight
+                                    width: GridView.view.cellWidth
+                                    height: GridView.view.cellHeight
                                     onClicked: loadDetail(model.appId)
                                     Column {
-                                        anchors { centerIn: parent; margins: Theme.paddingSmall }
+                                        anchors { fill: parent; margins: Theme.paddingSmall }
                                         spacing: Theme.paddingSmall
-                                        width: parent.width - Theme.paddingMedium * 2
                                         Item {
                                             width: Theme.itemSizeMedium; height: Theme.itemSizeMedium
                                             anchors.horizontalCenter: parent.horizontalCenter
