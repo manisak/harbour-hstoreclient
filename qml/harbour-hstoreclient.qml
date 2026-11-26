@@ -38,6 +38,158 @@ Rectangle {
     // current horizontal page index (0=home, 1=categories, 2=search)
     property int currentPage: 0
 
+    // ------------------------- i18n -------------------------
+    // Simple dictionary-based translation (sailfish-qml can't load .qm files
+    // without ApplicationWindow + sailfishapp_i18n, so we do it in QML).
+    property string lang: {
+        var l = Qt.locale().name.substring(0, 2).toLowerCase();
+        return (l === "de" || l === "fr" || l === "es") ? l : "en";
+    }
+
+    property var translations: ({
+        "en": {
+            "Community apps for Sailfish OS": "Community apps for Sailfish OS",
+            "New apps": "New apps",
+            "Best apps": "Best apps",
+            "Categories": "Categories",
+            "All apps": "All apps",
+            "Search": "Search",
+            "Search apps, developers…": "Search apps, developers…",
+            "No apps match your search.": "No apps match your search.",
+            "Type to search…": "Type to search…",
+            "About Harpoon Store": "About Harpoon Store",
+            "Reload": "Reload",
+            "Back to top": "Back to top",
+            "‹ Back to main": "‹ Back to main",
+            "Open repository in browser": "Open repository in browser",
+            "Install with Harpoon": "Install with Harpoon",
+            "Developer": "Developer",
+            "Tap to see all apps by this developer ›": "Tap to see all apps by this developer ›",
+            "Contributors": "Contributors",
+            "Screenshots": "Screenshots",
+            "About this app": "About this app",
+            "Source": "Source",
+            "More from this developer": "More from this developer",
+            "Comments": "Comments",
+            "No comments yet. Visit the website to add one.": "No comments yet. Visit the website to add one.",
+            "published apps": "published apps",
+            "Member since": "Member since",
+            "Apps by this developer": "Apps by this developer",
+            "A community app index for Sailfish OS.\nAll apps are published by their respective developers. Install via Harpoon.": "A community app index for Sailfish OS.\nAll apps are published by their respective developers. Install via Harpoon.",
+            "Close": "Close",
+            "Loading…": "Loading…",
+            "Store not reachable (offline?)": "Store not reachable (offline?)",
+            "apps": "apps"
+        },
+        "de": {
+            "Community apps for Sailfish OS": "Community-Apps für Sailfish OS",
+            "New apps": "Neue Apps",
+            "Best apps": "Beste Apps",
+            "Categories": "Kategorien",
+            "All apps": "Alle Apps",
+            "Search": "Suche",
+            "Search apps, developers…": "Apps, Entwickler suchen…",
+            "No apps match your search.": "Keine Apps gefunden.",
+            "Type to search…": "Zum Suchen tippen…",
+            "About Harpoon Store": "Über Harpoon Store",
+            "Reload": "Neu laden",
+            "Back to top": "Nach oben",
+            "‹ Back to main": "‹ Zurück zur Übersicht",
+            "Open repository in browser": "Repository im Browser öffnen",
+            "Install with Harpoon": "Mit Harpoon installieren",
+            "Developer": "Entwickler",
+            "Tap to see all apps by this developer ›": "Alle Apps dieses Entwicklers ansehen ›",
+            "Contributors": "Mitwirkende",
+            "Screenshots": "Screenshots",
+            "About this app": "Über diese App",
+            "Source": "Quellcode",
+            "More from this developer": "Mehr von diesem Entwickler",
+            "Comments": "Kommentare",
+            "No comments yet. Visit the website to add one.": "Noch keine Kommentare. Auf der Website hinzufügen.",
+            "published apps": "veröffentlichte Apps",
+            "Member since": "Mitglied seit",
+            "Apps by this developer": "Apps dieses Entwicklers",
+            "A community app index for Sailfish OS.\nAll apps are published by their respective developers. Install via Harpoon.": "Ein Community-App-Verzeichnis für Sailfish OS.\nAlle Apps werden von ihren jeweiligen Entwicklern veröffentlicht. Installation via Harpoon.",
+            "Close": "Schliessen",
+            "Loading…": "Laden…",
+            "Store not reachable (offline?)": "Store nicht erreichbar (offline?)",
+            "apps": "Apps"
+        },
+        "fr": {
+            "Community apps for Sailfish OS": "Applications communautaires pour Sailfish OS",
+            "New apps": "Nouvelles apps",
+            "Best apps": "Meilleures apps",
+            "Categories": "Catégories",
+            "All apps": "Toutes les apps",
+            "Search": "Recherche",
+            "Search apps, developers…": "Rechercher des apps, développeurs…",
+            "No apps match your search.": "Aucune application ne correspond.",
+            "Type to search…": "Tapez pour rechercher…",
+            "About Harpoon Store": "À propos de Harpoon Store",
+            "Reload": "Recharger",
+            "Back to top": "Retour en haut",
+            "‹ Back to main": "‹ Retour à l'accueil",
+            "Open repository in browser": "Ouvrir le dépôt dans le navigateur",
+            "Install with Harpoon": "Installer avec Harpoon",
+            "Developer": "Développeur",
+            "Tap to see all apps by this developer ›": "Voir toutes les apps de ce développeur ›",
+            "Contributors": "Contributeurs",
+            "Screenshots": "Captures d'écran",
+            "About this app": "À propos de cette app",
+            "Source": "Source",
+            "More from this developer": "Plus de ce développeur",
+            "Comments": "Commentaires",
+            "No comments yet. Visit the website to add one.": "Pas encore de commentaires. Visitez le site pour en ajouter.",
+            "published apps": "apps publiées",
+            "Member since": "Membre depuis",
+            "Apps by this developer": "Apps de ce développeur",
+            "A community app index for Sailfish OS.\nAll apps are published by their respective developers. Install via Harpoon.": "Un catalogue d'applications communautaires pour Sailfish OS.\nToutes les apps sont publiées par leurs développeurs respectifs. Installation via Harpoon.",
+            "Close": "Fermer",
+            "Loading…": "Chargement…",
+            "Store not reachable (offline?)": "Store injoignable (hors ligne ?)",
+            "apps": "apps"
+        },
+        "es": {
+            "Community apps for Sailfish OS": "Aplicaciones comunitarias para Sailfish OS",
+            "New apps": "Nuevas apps",
+            "Best apps": "Mejores apps",
+            "Categories": "Categorías",
+            "All apps": "Todas las apps",
+            "Search": "Buscar",
+            "Search apps, developers…": "Buscar apps, desarrolladores…",
+            "No apps match your search.": "Ninguna app coincide con tu búsqueda.",
+            "Type to search…": "Escribe para buscar…",
+            "About Harpoon Store": "Acerca de Harpoon Store",
+            "Reload": "Recargar",
+            "Back to top": "Volver arriba",
+            "‹ Back to main": "‹ Volver al inicio",
+            "Open repository in browser": "Abrir repositorio en el navegador",
+            "Install with Harpoon": "Instalar con Harpoon",
+            "Developer": "Desarrollador",
+            "Tap to see all apps by this developer ›": "Ver todas las apps de este desarrollador ›",
+            "Contributors": "Colaboradores",
+            "Screenshots": "Capturas de pantalla",
+            "About this app": "Acerca de esta app",
+            "Source": "Fuente",
+            "More from this developer": "Más de este desarrollador",
+            "Comments": "Comentarios",
+            "No comments yet. Visit the website to add one.": "Aún no hay comentarios. Visita el sitio web para añadir uno.",
+            "published apps": "apps publicadas",
+            "Member since": "Miembro desde",
+            "Apps by this developer": "Apps de este desarrollador",
+            "A community app index for Sailfish OS.\nAll apps are published by their respective developers. Install via Harpoon.": "Un catálogo de aplicaciones comunitarias para Sailfish OS.\nTodas las apps son publicadas por sus respectivos desarrolladores. Instalación vía Harpoon.",
+            "Close": "Cerrar",
+            "Loading…": "Cargando…",
+            "Store not reachable (offline?)": "Tienda no accesible (¿sin conexión?)",
+            "apps": "apps"
+        }
+    })
+
+    function tr(key) {
+        var dict = translations[lang] || translations["en"];
+        return dict[key] || translations["en"][key] || key;
+    }
+
     // ------------------------- helpers -------------------------
 
     function harpoonLink(repoUrl) {
@@ -256,13 +408,13 @@ Rectangle {
                         clip: true
 
                         PullDownMenu {
-                            MenuItem { text: qsTr("About Harpoon Store"); onClicked: aboutOverlay.visible = true }
-                            MenuItem { text: qsTr("Reload");              onClicked: { loadCats(); loadApps(); } }
+                            MenuItem { text: tr("About Harpoon Store"); onClicked: aboutOverlay.visible = true }
+                            MenuItem { text: tr("Reload");              onClicked: { loadCats(); loadApps(); } }
                         }
 
                         PushUpMenu {
                             visible: homeFlick.contentHeight > homeFlick.height
-                            MenuItem { text: qsTr("Back to top"); onClicked: homeFlick.scrollToTop() }
+                            MenuItem { text: tr("Back to top"); onClicked: homeFlick.scrollToTop() }
                         }
 
                         Column {
@@ -290,7 +442,7 @@ Rectangle {
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
                                         Label {
-                                            text: qsTr("Harpoon Store")
+                                            text: tr("Harpoon Store")
                                             font.pixelSize: Theme.fontSizeExtraLarge
                                             font.family: Theme.fontFamilyHeading
                                             color: Theme.highlightColor
@@ -298,7 +450,7 @@ Rectangle {
                                         }
                                     }
                                     Label {
-                                        text: qsTr("Community apps for Sailfish OS")
+                                        text: tr("Community apps for Sailfish OS")
                                         font.pixelSize: Theme.fontSizeSmall
                                         color: Theme.secondaryColor
                                     }
@@ -306,11 +458,17 @@ Rectangle {
                             }
 
                             // ---- section: New apps ----
-                            SectionHeader {
-                                text: qsTr("New apps")
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: { loadCategory("", qsTr("All apps")); }
+                            BackgroundItem {
+                                width: parent.width
+                                height: Theme.itemSizeSmall
+                                onClicked: { loadCategory("", tr("All apps")); }
+                                Label {
+                                    anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
+                                              verticalCenter: parent.verticalCenter }
+                                    text: tr("New apps")
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeLarge
+                                    font.family: Theme.fontFamilyHeading
                                 }
                                 Label {
                                     anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
@@ -383,12 +541,18 @@ Rectangle {
                             }
 
                             // ---- section: Best apps ----
-                            SectionHeader {
-                                text: qsTr("Best apps")
+                            BackgroundItem {
+                                width: parent.width
+                                height: Theme.itemSizeSmall
                                 visible: bestModel.count > 0
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: { /* TODO: best apps page */ }
+                                onClicked: { /* best apps page — could be added later */ }
+                                Label {
+                                    anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
+                                              verticalCenter: parent.verticalCenter }
+                                    text: tr("Best apps")
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeLarge
+                                    font.family: Theme.fontFamilyHeading
                                 }
                                 Label {
                                     anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
@@ -462,11 +626,17 @@ Rectangle {
                             }
 
                             // ---- section: Categories ----
-                            SectionHeader {
-                                text: qsTr("Categories")
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: root.currentPage = 1
+                            BackgroundItem {
+                                width: parent.width
+                                height: Theme.itemSizeSmall
+                                onClicked: root.currentPage = 1
+                                Label {
+                                    anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
+                                              verticalCenter: parent.verticalCenter }
+                                    text: tr("Categories")
+                                    color: Theme.highlightColor
+                                    font.pixelSize: Theme.fontSizeLarge
+                                    font.family: Theme.fontFamilyHeading
                                 }
                                 Label {
                                     anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
@@ -492,7 +662,7 @@ Rectangle {
                                     Label {
                                         anchors { right: parent.right; rightMargin: Theme.horizontalPageMargin
                                                   verticalCenter: parent.verticalCenter }
-                                        text: model.count + " " + qsTr("apps") + "  ›"
+                                        text: model.count + " " + tr("apps") + "  ›"
                                         color: Theme.secondaryColor
                                         font.pixelSize: Theme.fontSizeSmall
                                     }
@@ -517,14 +687,14 @@ Rectangle {
                             Label {
                                 anchors { left: parent.left; leftMargin: Theme.horizontalPageMargin
                                           verticalCenter: parent.verticalCenter }
-                                text: qsTr("Categories")
+                                text: tr("Categories")
                                 font.pixelSize: Theme.fontSizeExtraLarge
                                 font.family: Theme.fontFamilyHeading
                                 color: Theme.highlightColor
                             }
                         }
                         PullDownMenu {
-                            MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+                            MenuItem { text: tr("‹ Back to main"); onClicked: goHome() }
                         }
                         delegate: BackgroundItem {
                             width: ListView.view.width
@@ -560,7 +730,7 @@ Rectangle {
                         clip: true
 
                         PullDownMenu {
-                            MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+                            MenuItem { text: tr("‹ Back to main"); onClicked: goHome() }
                         }
 
                         Column {
@@ -579,7 +749,7 @@ Rectangle {
                                               topMargin: Theme.paddingLarge }
                                     spacing: Theme.paddingSmall
                                     Label {
-                                        text: qsTr("Search")
+                                        text: tr("Search")
                                         font.pixelSize: Theme.fontSizeExtraLarge
                                         font.family: Theme.fontFamilyHeading
                                         color: Theme.highlightColor
@@ -589,7 +759,7 @@ Rectangle {
 
                             SearchField {
                                 width: parent.width
-                                placeholderText: qsTr("Search apps, developers…")
+                                placeholderText: tr("Search apps, developers…")
                                 onTextChanged: { root.searchText = text; refreshView(); }
                                 EnterKey.onClicked: focus = false
                             }
@@ -657,7 +827,7 @@ Rectangle {
                                 visible: viewModel.count === 0
                                 Label {
                                     anchors.centerIn: parent
-                                    text: root.searchText.length > 0 ? qsTr("No apps match your search.") : qsTr("Type to search…")
+                                    text: root.searchText.length > 0 ? tr("No apps match your search.") : tr("Type to search…")
                                     color: Theme.secondaryColor
                                     font.pixelSize: Theme.fontSizeSmall
                                 }
@@ -694,7 +864,7 @@ Rectangle {
                 }
             }
             PullDownMenu {
-                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+                MenuItem { text: tr("‹ Back to main"); onClicked: goHome() }
             }
             delegate: BackgroundItem {
                 width: ListView.view.width
@@ -769,19 +939,19 @@ Rectangle {
 
             PullDownMenu {
                 MenuItem {
-                    text: qsTr("Open repository in browser")
+                    text: tr("Open repository in browser")
                     onClicked: if (root.detail) Qt.openUrlExternally(root.detail.repo_url)
                 }
                 MenuItem {
-                    text: qsTr("Install with Harpoon")
+                    text: tr("Install with Harpoon")
                     onClicked: if (root.detail) Qt.openUrlExternally(harpoonLink(root.detail.repo_url))
                 }
-                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+                MenuItem { text: tr("‹ Back to main"); onClicked: goHome() }
             }
 
             PushUpMenu {
                 visible: detailFlick.contentHeight > detailFlick.height
-                MenuItem { text: qsTr("Back to top"); onClicked: detailFlick.scrollToTop() }
+                MenuItem { text: tr("Back to top"); onClicked: detailFlick.scrollToTop() }
             }
 
             Column {
@@ -878,7 +1048,7 @@ Rectangle {
                         color: Theme.highlightColor
                         Label {
                             anchors.centerIn: parent
-                            text: "⚓  " + qsTr("Install with Harpoon")
+                            text: "⚓  " + tr("Install with Harpoon")
                             color: Theme.overlayBackgroundColor
                             font.pixelSize: Theme.fontSizeMedium
                             font.bold: true
@@ -887,7 +1057,7 @@ Rectangle {
                 }
 
                 // developer card
-                SectionHeader { text: qsTr("Developer") }
+                SectionHeader { text: tr("Developer") }
                 BackgroundItem {
                     width: parent.width
                     height: devRow.height + Theme.paddingMedium * 2
@@ -920,7 +1090,7 @@ Rectangle {
                                 font.pixelSize: Theme.fontSizeMedium
                             }
                             Label {
-                                text: qsTr("Tap to see all apps by this developer ›")
+                                text: tr("Tap to see all apps by this developer ›")
                                 color: Theme.secondaryColor
                                 font.pixelSize: Theme.fontSizeExtraSmall
                             }
@@ -933,7 +1103,7 @@ Rectangle {
                     width: parent.width
                     spacing: Theme.paddingSmall
                     visible: !!(root.detail && root.detail.contributors && root.detail.contributors.length > 0)
-                    SectionHeader { text: qsTr("Contributors") }
+                    SectionHeader { text: tr("Contributors") }
                     Flow {
                         width: parent.width - 2 * Theme.horizontalPageMargin
                         x: Theme.horizontalPageMargin
@@ -966,7 +1136,7 @@ Rectangle {
                     width: parent.width
                     spacing: Theme.paddingSmall
                     visible: !!(root.detail && root.detail.screenshots && root.detail.screenshots.length > 0)
-                    SectionHeader { text: qsTr("Screenshots") }
+                    SectionHeader { text: tr("Screenshots") }
                     SilicaListView {
                         width: parent.width
                         height: Theme.itemSizeHuge * 2
@@ -1001,7 +1171,7 @@ Rectangle {
                     width: parent.width
                     spacing: Theme.paddingSmall
                     visible: !!(root.detail && root.detail.description && root.detail.description.length > 0)
-                    SectionHeader { text: qsTr("About this app") }
+                    SectionHeader { text: tr("About this app") }
                     Label {
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * Theme.horizontalPageMargin
@@ -1016,7 +1186,7 @@ Rectangle {
                 Column {
                     width: parent.width
                     spacing: Theme.paddingSmall
-                    SectionHeader { text: qsTr("Source") }
+                    SectionHeader { text: tr("Source") }
                     BackgroundItem {
                         width: parent.width
                         height: srcLbl.height + Theme.paddingMedium * 2
@@ -1039,7 +1209,7 @@ Rectangle {
                     width: parent.width
                     spacing: Theme.paddingSmall
                     visible: !!(root.detail && root.detail.more_from_developer && root.detail.more_from_developer.length > 0)
-                    SectionHeader { text: qsTr("More from this developer") }
+                    SectionHeader { text: tr("More from this developer") }
                     Repeater {
                         model: root.detail ? root.detail.more_from_developer : []
                         delegate: BackgroundItem {
@@ -1070,8 +1240,8 @@ Rectangle {
                     spacing: Theme.paddingSmall
                     SectionHeader {
                         text: root.detail
-                              ? qsTr("Comments") + " (" + (root.detail.comments ? root.detail.comments.length : 0) + ")"
-                              : qsTr("Comments")
+                              ? tr("Comments") + " (" + (root.detail.comments ? root.detail.comments.length : 0) + ")"
+                              : tr("Comments")
                     }
                     Repeater {
                         model: root.detail ? root.detail.comments : []
@@ -1104,7 +1274,7 @@ Rectangle {
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * Theme.horizontalPageMargin
                         visible: !(root.detail && root.detail.comments && root.detail.comments.length > 0)
-                        text: qsTr("No comments yet. Visit the website to add one.")
+                        text: tr("No comments yet. Visit the website to add one.")
                         color: Theme.secondaryColor
                         font.pixelSize: Theme.fontSizeSmall
                         wrapMode: Text.Wrap
@@ -1129,7 +1299,7 @@ Rectangle {
             clip: true
 
             PullDownMenu {
-                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+                MenuItem { text: tr("‹ Back to main"); onClicked: goHome() }
             }
 
             Column {
@@ -1170,7 +1340,7 @@ Rectangle {
                             }
                             Label {
                                 text: root.devData
-                                      ? (root.devData.app_count + " " + qsTr("published apps") +
+                                      ? (root.devData.app_count + " " + tr("published apps") +
                                          "  ·  " + (root.devData.role || "user"))
                                       : ""
                                 color: Theme.secondaryColor
@@ -1178,7 +1348,7 @@ Rectangle {
                             }
                             Label {
                                 visible: !!(root.devData && root.devData.member_since)
-                                text: root.devData ? qsTr("Member since") + " " + (root.devData.member_since || "").slice(0, 10) : ""
+                                text: root.devData ? tr("Member since") + " " + (root.devData.member_since || "").slice(0, 10) : ""
                                 color: Theme.secondaryColor
                                 font.pixelSize: Theme.fontSizeTiny
                             }
@@ -1186,7 +1356,7 @@ Rectangle {
                     }
                 }
 
-                SectionHeader { text: qsTr("Apps by this developer") }
+                SectionHeader { text: tr("Apps by this developer") }
 
                 Repeater {
                     model: root.devData ? root.devData.apps : []
@@ -1261,7 +1431,7 @@ Rectangle {
         SilicaFlickable {
             anchors.fill: parent
             PullDownMenu {
-                MenuItem { text: qsTr("‹ Back to main"); onClicked: goHome() }
+                MenuItem { text: tr("‹ Back to main"); onClicked: goHome() }
             }
         }
         MouseArea { anchors.fill: parent; onClicked: aboutOverlay.visible = false }
@@ -1279,7 +1449,7 @@ Rectangle {
             Label {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: qsTr("Harpoon Store")
+                text: tr("Harpoon Store")
                 font.pixelSize: Theme.fontSizeExtraLarge
                 color: Theme.highlightColor
                 font.family: Theme.fontFamilyHeading
@@ -1288,7 +1458,7 @@ Rectangle {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: qsTr("A community app index for Sailfish OS.\nAll apps are published by their respective developers. Install via Harpoon.")
+                text: tr("A community app index for Sailfish OS.\nAll apps are published by their respective developers. Install via Harpoon.")
                 color: Theme.primaryColor
                 font.pixelSize: Theme.fontSizeSmall
             }
@@ -1308,7 +1478,7 @@ Rectangle {
                 Label {
                     id: closeLbl
                     anchors.centerIn: parent
-                    text: qsTr("Close")
+                    text: tr("Close")
                     color: Theme.overlayBackgroundColor
                     font.pixelSize: Theme.fontSizeMedium
                     font.bold: true
@@ -1350,7 +1520,7 @@ Rectangle {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: qsTr("Harpoon Store")
+                text: tr("Harpoon Store")
                 font.pixelSize: Theme.fontSizeExtraLarge
                 font.family: Theme.fontFamilyHeading
                 color: Theme.highlightColor
@@ -1359,7 +1529,7 @@ Rectangle {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: qsTr("Community apps for Sailfish OS")
+                text: tr("Community apps for Sailfish OS")
                 font.pixelSize: Theme.fontSizeTiny
                 color: Theme.secondaryColor
             }
